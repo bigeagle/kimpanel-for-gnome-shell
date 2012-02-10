@@ -10,7 +10,7 @@ const Gio = imports.gi.Gio;
 const Lang = imports.lang;
 
 const Me = imports.ui.extensionSystem.extensions['kimpanel@kde.org'];
-const KimIcon = Me.indicator.kimIcon;
+const KimIndicator = Me.indicator.kimIndicator;
 const InputPanel = Me.panel.inputPanel;
 
 let kimpanel = null;
@@ -54,13 +54,13 @@ Kimpanel.prototype = {
         this.showLookupTable = false;
         this.showAux = false;
         this.enabled = false;
-        this.kimicon = new KimIcon(this);
+        this.indicator = new KimIndicator(this);
         this.inputpanel = new InputPanel(this);
     },
 
     destroy: function ()
     {
-        this.kimicon.destroy();
+        this.indicator.destroy();
         DBus.session.unexportObject(this);
         this.inputpanel = null;
     },
@@ -69,7 +69,7 @@ Kimpanel.prototype = {
     {
         Main.uiGroup.add_actor(this.inputpanel.actor);
         Main.uiGroup.add_actor(this.inputpanel._cursor);
-        Main.panel.addToStatusArea('kimpanel', this.kimicon);
+        //Main.panel._rightBox.insert_actor(this.indicator.actor, 0);
     },
 
     updateInputPanel: function()
@@ -92,12 +92,6 @@ Kimpanel.prototype = {
         this.inputpanel.setLookupTable(text);
         this.inputpanel.updatePosition();
         
-        if(this.enabled)
-        {
-            this.kimicon._active();    
-        }else{
-            this.kimicon._deactive();
-        }
     },
 
     emit: function(signal)
@@ -127,11 +121,11 @@ function _parseSignal(conn, sender, object, iface, signal, param, user_data)
     {
     case 'RegisterProperties':
         let properties = value[0];
-        kimpanel.kimicon._updateProperties(properties);
+        kimpanel.indicator._updateProperties(properties);
         break;
     case 'UpdateProperty':
-        kimpanel.kimicon._parseProperty(value[0]);
-        kimpanel.kimicon._updateProperties();
+        kimpanel.indicator._parseProperty(value[0]);
+        kimpanel.indicator._updateProperties();
         break;
     case 'UpdateSpotLocation':
         kimpanel.x = value[0];
