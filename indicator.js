@@ -12,14 +12,17 @@ const Lib = Me.imports.lib;
 
 const KimIndicator = new Lang.Class({
     Name: "KimIndicator",
-    Extends: PanelMenu.SystemStatusButton,
+    Extends: PanelMenu.Button,
 
     _init: function(params){
+        this.parent(0.0, 'kimpanel');
         params = Params.parse(params, {kimpanel: null});
         this._properties = {};
         this._propertySwitch = {};
 
-        PanelMenu.SystemStatusButton.prototype._init.call(this, 'input-keyboard-symbolic', 'kimpanel');
+        this._box = new St.BoxLayout({ style_class: 'panel-status-button-box' });
+        this.actor.add_actor(this._box);
+        this._setIcon('input-keyboard-symbolic');
 
         this.kimpanel = params.kimpanel;
 
@@ -51,6 +54,7 @@ const KimIndicator = new Lang.Class({
         this.menu.addMenuItem(this._reload);
         this.menu.addMenuItem(this._setting);
         this.menu.addMenuItem(this._prefs);
+        this.actor.hide();
     },
 
     _addPropertyItem: function(key) {
@@ -88,6 +92,7 @@ const KimIndicator = new Lang.Class({
     _updateProperties: function( properties ) {
         if( properties == undefined )
         {
+            let key;
             for ( key in this._propertySwitch )
             {
                 let property = this._properties[key];
@@ -105,6 +110,7 @@ const KimIndicator = new Lang.Class({
             }
 
             let count = 0;
+            let p;
             for( p in properties) {
                 count ++;
                 let property = Lib.parseProperty( properties[p] );
@@ -115,40 +121,31 @@ const KimIndicator = new Lang.Class({
                 else
                     this._addPropertyItem(key);
             }
-            if (count != 0) {
-                this.visible = false;
+            if (count > 0) {
+                this.actor.show();
+            } else {
+                this.actor.hide();
             }
-            else
-                this.visible = true;
-        }
-    },
-
-    _clearActor: function() {
-        if (this.mainIcon != null) {
-            this._box.remove_actor(this.mainIcon);
-            this.mainIcon.destroy();
-            this.mainIcon = null;
-            this._iconName = null;
         }
     },
 
     _setIcon: function(iconName) {
-        this._clearActor();
-        this._iconName = iconName;
-        this.mainIcon = Lib.createIcon(iconName, {style_class: 'system-status-icon'});
-        if (!this.mainIcon)
-            this.mainIcon = Lib.createIcon("input-keyboard-symbolic", {style_class: 'system-status-icon'});
+        let gicon = Lib.createIcon(iconName);
         if (this.mainIcon) {
-            this._box.add_actor(this.mainIcon);
-            this._box.queue_redraw();
+           this.mainIcon.gicon = gicon;
+        } else {
+            let icon = new St.Icon({ gicon: gicon,
+                                     style_class: 'system-status-icon' });
+            this._box.add_actor(icon);
+            this.mainIcon = icon;
         }
     },
 
     _active: function(){
-         this.setIcon(this._properties['/Fcitx/im'].icon);
+         this._setIcon(this._properties['/Fcitx/im'] ? this._properties['/Fcitx/im'].icon : 'input-keyboard');
     },
 
     _deactive: function(){
-        this._setIcon('input-keyboard-symbolic');
+        this._setIcon('input-keyboard');
     }
 });

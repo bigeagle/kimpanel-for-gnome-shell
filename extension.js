@@ -38,6 +38,15 @@ const Kimpanel2Iface = <interface name="org.kde.impanel2">
     <arg type="i" name="w" direction="in" />
     <arg type="i" name="h" direction="in" />
 </method>
+<method name="SetLookupTable">
+    <arg direction="in" type="as" name="label"/>
+    <arg direction="in" type="as" name="text"/>
+    <arg direction="in" type="as" name="attr"/>
+    <arg direction="in" type="b" name="hasPrev"/>
+    <arg direction="in" type="b" name="hasNext"/>
+    <arg direction="in" type="i" name="cursor"/>
+    <arg direction="in" type="i" name="layout"/>
+</method>
 </interface>
 
 const Kimpanel = new Lang.Class({
@@ -50,27 +59,16 @@ const Kimpanel = new Lang.Class({
                                          "org.kde.impanel",
                                          Gio.BusNameOwnerFlags.NONE,
                                          null,
-                                         null,
+                                         Lang.bind(this, this.requestNameFinished),
                                          null);
         this.settings = convenience.getSettings();
         this._impl = Gio.DBusExportedObject.wrapJSObject(KimpanelIface, this);
         this._impl.export(Gio.DBus.session, '/org/kde/impanel');
         this._impl2 = Gio.DBusExportedObject.wrapJSObject(Kimpanel2Iface, this);
         this._impl2.export(Gio.DBus.session, '/org/kde/impanel');
-        this.preedit = '';
-        this.aux = '';
-        this.x = 0;
-        this.y = 0;
-        this.w = 0;
-        this.h = 0;
-        this.table = [];
-        this.label = [];
-        this.pos = 0;
-        this.cursor = -1;
-        this.showPreedit = false;
-        this.showLookupTable = false;
-        this.showAux = false;
-        this.enabled = false;
+        this.current_service = '';
+        this.watch_id = 0;
+        this.resetData();
         this.indicator = new KimIndicator({kimpanel: this});
         this.inputpanel = new InputPanel({kimpanel: this});
         this.menu = new KimMenu({sourceActor: this.indicator.actor, kimpanel: this});
@@ -86,6 +84,17 @@ const Kimpanel = new Lang.Class({
                 obj.menu.execMenu(value[0]);
                 break
             case 'RegisterProperties':
+                if (obj.current_service != sender) {
+                    obj.current_service = sender;
+                    if (obj.watch_id != 0) {
+                        Gio.bus_unwatch_name(obj.watch_id);
+                    }
+                    obj.watch_id = Gio.bus_watch_name(Gio.BusType.SESSION,
+                                                       obj.current_service,
+                                                       Gio.BusNameWatcherFlags.NONE,
+                                                       null,
+                                                       Lang.bind(obj, obj.imExit));
+                }
                 obj.indicator._updateProperties(value[0]);
                 break;
             case 'UpdateProperty':
@@ -177,8 +186,45 @@ const Kimpanel = new Lang.Class({
         );
     },
 
+    resetData: function() {
+        this.preedit = '';
+        this.aux = '';
+        this.layoutHint = 0;
+        this.x = 0;
+        this.y = 0;
+        this.w = 0;
+        this.h = 0;
+        this.table = [];
+        this.label = [];
+        this.pos = 0;
+        this.cursor = -1;
+        this.showPreedit = false;
+        this.showLookupTable = false;
+        this.showAux = false;
+        this.enabled = false;
+    },
+
+    imExit: function(conn, name) {
+        if (this.current_service == name) {
+            this.current_service = '';
+            if (this.watch_id != 0) {
+                Gio.bus_unwatch_name(this.watch_id);
+                this.watch_id = 0;
+            }
+
+            this.resetData();
+            this.indicator._updateProperties({});
+            this.updateInputPanel();
+        }
+    },
+
+    requestNameFinished: function() {
+        this.emit('PanelCreated');
+        this.emit2('PanelCreated2');
+    },
+
     isLookupTableVertical: function() {
-        return Lib.isLookupTableVertical(this.settings);
+        return this.layoutHint == 0 ? Lib.isLookupTableVertical(this.settings) : (this.layoutHint == 1);
     },
 
     getTextStyle: function() {
@@ -187,6 +233,11 @@ const Kimpanel = new Lang.Class({
 
     destroy: function ()
     {
+        if (this.watch_id != 0) {
+            Gio.bus_unwatch_name(this.watch_id);
+            this.watch_id = 0;
+            this.current_service = '';
+        }
         this.settings.disconnect(this.verticalSignal);
         this.settings.disconnect(this.fontSignal);
         this.conn.signal_unsubscribe(this.dbusSignal);
@@ -246,6 +297,15 @@ const Kimpanel = new Lang.Class({
         this.h = h;
         if (changed)
             this.updateInputPanel();
+    },
+    SetLookupTable: function(labels, texts, attrs, hasPrev, hasNext, cursor, layout)
+    {
+        this.label = labels;
+        this.table = texts;
+        this.cursor = cursor;
+        this.layoutHint = layout;
+        this.updateInputPanel();
+        this.inputpanel.setVertical(this.isLookupTableVertical());
     }
 });
 
@@ -257,8 +317,6 @@ function enable()
 {
     if (!kimpanel) {
         kimpanel = new Kimpanel();
-        kimpanel.emit('PanelCreated');
-        kimpanel.emit2('PanelCreated2');
     }
 }
 
